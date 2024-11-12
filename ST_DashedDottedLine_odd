@@ -1,0 +1,24 @@
+DROP FUNCTION IF EXISTS ST_DashedDottedLine_odd(
+	geom GEOMETRY,
+	sl integer,
+	n integer)
+
+CREATE OR REPLACE FUNCTION ST_DashedDottedLine_odd(
+	geom GEOMETRY,
+	sl integer,
+	n integer)
+RETURNS TABLE (geom GEOMETRY) AS 
+$BODY$
+	WITH
+	    geodata AS (SELECT row_number() over() AS id, geom),
+	    linedivide AS (SELECT row_number() over() AS id, ST_LineSubstring(d.geom, substart, CASE WHEN subend > 1 THEN 1 ELSE subend END) geom FROM (SELECT id, geom, ST_Length(((geom)::geometry)) len, sl sublen FROM geodata) AS d CROSS JOIN LATERAL (SELECT i, (sublen * i)/len AS substart, (sublen * (i+1))/len AS subend FROM generate_series(0, floor(d.len/sublen)::integer) AS t(i) WHERE (sublen * i)/len <> 1.0) AS d2),
+	    tblc AS (SELECT geom, case id % 2 when 0 then 'even' else 'odd' end FROM linedivide),
+	    tbld AS (SELECT ST_Collect(geom) geom FROM tblc WHERE tblc.case='odd'),
+	    tble AS (SELECT (ST_Dump(geom)).geom geom FROM tblc WHERE tblc.case='even'),
+	    intervals AS (SELECT generate_series (0, n-1) as steps), 
+	    group_geodata AS (SELECT ST_LineInterpolatePoint(geom, steps/(SELECT count(steps)::float-1 FROM intervals)) geom FROM tble, intervals GROUP BY intervals.steps, geom UNION SELECT geom FROM tbld)
+	    SELECT ST_Collect(geom) geom FROM group_geodata; 
+$BODY$
+LANGUAGE SQL;
+
+SELECT ST_DashedDottedLine_odd(geom, 15, 5) geom FROM <line_name_table>

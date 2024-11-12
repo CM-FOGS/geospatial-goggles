@@ -1,0 +1,21 @@
+DROP FUNCTION IF EXISTS ST_SmoothingPolygonsNotchesInternalVertices(
+    geom GEOMETRY)
+
+CREATE OR REPLACE FUNCTION ST_SmoothingPolygonsNotchesInternalVertices(
+    geom GEOMETRY)
+RETURNS TABLE (geom GEOMETRY) AS 
+$BODY$
+    WITH 
+        tbla AS (SELECT (ST_Dump($1)).geom),
+        tblb AS (SELECT (ST_DumpPoints(geom)).geom FROM tbla),
+        tblc AS (SELECT (ST_Dump(ST_DelaunayTriangles(ST_Collect(geom)))).geom geom FROM tblb),
+        tbld AS (SELECT (ST_Dump(ST_Difference(a.geom,b.geom))).geom AS geom FROM tblc a 
+CROSS JOIN LATERAL (SELECT ST_Collect(geom) geom FROM tbla) AS b),
+        tble AS (SELECT ST_Buffer(ST_Union(ST_Buffer(geom,-0.000001)),0.000001) geom FROM tbla),
+        tblf AS (SELECT ST_Buffer(geom,0.000001) geom FROM tblb a WHERE EXISTS (SELECT 1 FROM tble b WHERE ST_Intersects(a.geom,b.geom))),
+        tblg AS (SELECT ST_Union(a.geom) geom FROM tbld a WHERE EXISTS (SELECT 1 FROM tblf b WHERE ST_Intersects(a.geom,b.geom)))
+        SELECT ST_Union(geom) geom FROM (SELECT * FROM tbla UNION SELECT * FROM tblg) foo
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_SmoothingPolygonsNotchesInternalVertices(ST_Union(geom)) geom FROM <polygon_name_table>

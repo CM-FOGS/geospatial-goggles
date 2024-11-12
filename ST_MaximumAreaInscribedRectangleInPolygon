@@ -1,0 +1,63 @@
+DROP FUNCTION IF EXISTS ST_MaximumAreaInscribedRectangleInPolygon(
+    geom GEOMETRY,
+    signed_distance float,
+    buffer float)
+
+CREATE OR REPLACE FUNCTION ST_MaximumAreaInscribedRectangleInPolygon(
+    geom GEOMETRY,
+    signed_distance float,
+    buffer float)
+RETURNS GEOMETRY AS
+$BODY$
+    WITH
+        tbl_rigth AS (WITH 
+        tbla AS (SELECT (ST_Dump($1)).geom),
+        tblb AS (SELECT geom1, geom2, CASE WHEN geom1>geom2 THEN geom1 WHEN geom1<=geom2 THEN geom2 END FROM (SELECT ST_MakeLine((ST_PointN(ST_Boundary(ST_OrientedEnvelope(geom)),1)), (ST_PointN(ST_Boundary(ST_OrientedEnvelope(geom)),2))) AS geom1, ST_MakeLine((ST_PointN(ST_Boundary(ST_OrientedEnvelope(geom)),2)), (ST_PointN(ST_Boundary(ST_OrientedEnvelope(geom)),3))) AS geom2 FROM tbla) AS foo),
+        tblc AS (SELECT ST_OffsetCurve(geom2, -signed_distance) geom FROM tblb UNION SELECT ST_OffsetCurve(ST_Rotate(a.geom2, -pi(), ST_Centroid(b.geom)), -signed_distance) geom FROM tblb a, tbla b),
+        tbld AS (SELECT ST_OffsetCurve(geom1, -signed_distance) geom FROM tblb UNION SELECT ST_OffsetCurve(ST_Rotate(a.geom1, -pi(), ST_Centroid(b.geom)), -signed_distance) geom FROM tblb a, tbla b),
+        tble AS (SELECT (ST_DumpPoints(ST_OffsetCurve(geom2, -signed_distance))).geom geom FROM tblb),
+        tblf AS (SELECT ST_ShortestLine(a.geom, ST_ExteriorRing(b.geom)) geom FROM tble a, tbla b),
+        tblg AS (SELECT (a.geom) geom FROM tblf a, tblf b WHERE ST_Length(a.geom)>ST_Length(b.geom)),
+        tblh AS (SELECT ((ST_Dump(ST_Intersection(a.geom, b.geom))).geom) geom FROM tblg a JOIN tbla b ON ST_Intersects(a.geom, b.geom)),
+        tbli AS (SELECT ST_ShortestLine(a.geom, b.geom) geom FROM tblh a JOIN LATERAL (SELECT (geom) AS geom FROM tbld) AS b ON true),
+        tblj AS (SELECT ((ST_Dump(ST_Intersection(ST_ExteriorRing(a.geom), b.geom))).geom) geom FROM tbla a JOIN tbli b ON ST_Intersects(a.geom, b.geom)),
+        tblk AS (SELECT ((ST_Dump(ST_Difference(a.geom, b.geom))).geom) geom FROM tblj a JOIN tblh b ON ST_Disjoint(a.geom, ST_Buffer(b.geom, buffer))),
+        tbll AS (SELECT ST_ShortestLine((ST_Dump(a.geom)).geom, b.geom) geom FROM tblk a, tblc b),
+        tblm AS (SELECT ((ST_Dump(ST_Intersection(ST_ExteriorRing(a.geom), b.geom))).geom) geom FROM tbla a JOIN tbll b ON ST_Intersects(a.geom, b.geom)),
+        tbln AS (SELECT ((ST_Dump(ST_Difference(a.geom, b.geom))).geom) geom FROM tblm a JOIN tblk b ON ST_Disjoint(a.geom, ST_Buffer(b.geom, buffer))),
+        tblo AS (SELECT ST_ShortestLine(a.geom, b.geom) geom FROM tbln a JOIN LATERAL (SELECT (geom) AS geom FROM tbld) AS b ON true),
+        tblp AS (SELECT ST_ShortestLine((ST_Dump(a.geom)).geom, b.geom) geom FROM tblh a, tblc b),
+        tblq AS (SELECT ((ST_Dump(ST_Intersection(a.geom, b.geom))).geom) geom FROM tblo a JOIN tblp b ON ST_Intersects(a.geom, b.geom)),    
+        tblr AS (SELECT (geom) geom FROM tblh UNION SELECT (geom) geom FROM tblk 
+            UNION SELECT (geom) geom FROM tbln UNION SELECT (geom) geom FROM tblq)
+    SELECT ST_Union(geom) geom FROM (SELECT ((ST_Dump(ST_DelaunayTriangles(ST_Collect(geom)))).geom) geom FROM tblr) foo),
+        tbl_lefth AS (WITH 
+        tbla AS (SELECT (ST_Dump($1)).geom),
+        tblb AS (SELECT geom1, geom2, CASE WHEN geom1>geom2 THEN geom1 WHEN geom1<=geom2 THEN geom2 END FROM (SELECT ST_MakeLine((ST_PointN(ST_Boundary(ST_OrientedEnvelope(geom)),1)), (ST_PointN(ST_Boundary(ST_OrientedEnvelope(geom)),2))) AS geom1, ST_MakeLine((ST_PointN(ST_Boundary(ST_OrientedEnvelope(geom)),2)), 
+(ST_PointN(ST_Boundary(ST_OrientedEnvelope(geom)),3))) AS geom2 FROM tbla) AS foo),
+        tblc AS (SELECT ST_OffsetCurve(geom2, -signed_distance) geom FROM tblb UNION SELECT ST_OffsetCurve(ST_Rotate(a.geom2, -pi(), ST_Centroid(b.geom)), -signed_distance) geom FROM tblb a, tbla b),
+        tbld AS (SELECT ST_OffsetCurve(geom1, -signed_distance) geom FROM tblb UNION SELECT ST_OffsetCurve(ST_Rotate(a.geom1, -pi(), ST_Centroid(b.geom)), -signed_distance) geom FROM tblb a, tbla b),
+        tble AS (SELECT (ST_DumpPoints(ST_OffsetCurve(geom2, -signed_distance))).geom geom FROM tblb),
+        tblf AS (SELECT ST_ShortestLine(a.geom, ST_ExteriorRing(b.geom)) geom FROM tble a, tbla b),
+        tblg AS (SELECT (a.geom) geom FROM tblf a, tblf b WHERE ST_Length(a.geom)<ST_Length(b.geom)),
+        tblh AS (SELECT ((ST_Dump(ST_Intersection(a.geom, b.geom))).geom) geom FROM tblg a JOIN tbla b ON ST_Intersects(a.geom, b.geom)),
+        tbli AS (SELECT ST_ShortestLine(a.geom, b.geom) geom FROM tblh a JOIN LATERAL (SELECT (geom) AS geom FROM tbld) AS b ON true),
+        tblj AS (SELECT ((ST_Dump(ST_Intersection(ST_ExteriorRing(a.geom), b.geom))).geom) geom FROM tbla a JOIN tbli b ON ST_Intersects(a.geom, b.geom)),
+        tblk AS (SELECT ((ST_Dump(ST_Difference(a.geom, b.geom))).geom) geom FROM tblj a JOIN tblh b ON ST_Disjoint(a.geom, ST_Buffer(b.geom, buffer))),
+        tbll AS (SELECT ST_ShortestLine((ST_Dump(a.geom)).geom, b.geom) geom FROM tblk a, tblc b),
+        tblm AS (SELECT ((ST_Dump(ST_Intersection(ST_ExteriorRing(a.geom), b.geom))).geom) geom FROM tbla a JOIN tbll b ON ST_Intersects(a.geom, b.geom)),
+        tbln AS (SELECT ((ST_Dump(ST_Difference(a.geom, b.geom))).geom) geom FROM tblm a JOIN tblk b ON ST_Disjoint(a.geom, ST_Buffer(b.geom, buffer))),
+        tblo AS (SELECT ST_ShortestLine(a.geom, b.geom) geom FROM tbln a JOIN LATERAL (SELECT (geom) AS geom FROM tbld) AS b ON true),
+        tblp AS (SELECT ST_ShortestLine((ST_Dump(a.geom)).geom, b.geom) geom FROM tblh a, tblc b),
+        tblq AS (SELECT ((ST_Dump(ST_Intersection(a.geom, b.geom))).geom) geom FROM tblo a JOIN tblp b ON ST_Intersects(a.geom, b.geom)),                  
+        tblr AS (SELECT (geom) geom FROM tblh UNION SELECT (geom) geom FROM tblk 
+            UNION SELECT (geom) geom FROM tbln UNION SELECT (geom) geom FROM tblq)
+        SELECT ST_Union(geom) geom FROM (SELECT ((ST_Dump(ST_DelaunayTriangles(ST_Collect(geom)))).geom) geom FROM tblr) foo)
+        SELECT geom FROM tbl_rigth UNION SELECT geom FROM tbl_lefth;
+    $BODY$
+LANGUAGE SQL
+
+SELECT ST_MaximumAreaInscribedRectangleInPolygon(geom, 1, 0.1) geom FROM <name_table>
+
+*This is an experimental function. This function is intended for working with trapezoidal polygons, right-angled triangles, even simple n-multigons (6 or more angles), circles. In the resulting table there will be no values of records describing simple shapes like square and rectangle, if they are present in the source table!
+This feature has another cryptic name ST_Mongoose (Herpestes)*

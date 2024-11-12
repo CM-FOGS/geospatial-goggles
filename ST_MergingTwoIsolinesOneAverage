@@ -1,0 +1,23 @@
+DROP FUNCTION IF EXISTS ST_MergingTwoIsolinesOneAverage(
+    geom GEOMETRY,
+    n integer)
+
+CREATE OR REPLACE FUNCTION ST_MergingTwoIsolinesOneAverage(
+    geom GEOMETRY,
+    n integer)
+RETURNS TABLE (geom GEOMETRY) AS
+$BODY$
+    WITH
+        tbla AS (SELECT (ST_Dump($1)).geom),
+        tblb AS (SELECT generate_series (0, n) as steps),
+        tblc AS (SELECT steps AS stp, ST_LineInterpolatePoint(geom, steps/(SELECT count(steps)::float-1 FROM tblb)) geom FROM tbla, tblb GROUP BY tblb.steps, geom),
+        tbld AS (SELECT ((ST_Dump(ST_VoronoiPolygons(ST_Collect(geom)))).geom) geom FROM tblc),
+        tble AS (SELECT ST_ExteriorRing(ST_Union(a.geom)) geom FROM tbld a JOIN tbla b ON ST_Intersects(a.geom, b.geom) GROUP BY b.geom),
+        tblf AS (SELECT (a.geom) geom FROM tble a, tble b WHERE ST_Length(a.geom)<ST_Length(b.geom)),
+        tblg AS (SELECT ST_MakeLine(pnt1, pnt2) geom FROM (SELECT ST_PointN(geom, generate_series(1, ST_NPoints(geom)-1)) pnt1, ST_PointN(geom, generate_series(2, ST_NPoints(geom))) pnt2 FROM tblf) AS geom),
+        tblh AS (SELECT ST_MakeLine(ST_Centroid(geom)) geom FROM tblg)
+        SELECT ST_MakeLine(ST_AddPoint(geom, ST_StartPoint(geom))) AS geom FROM tblh;
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_MergingTwoIsolinesOneAverage(ST_Union(geom), 501) geom FROM <name_table>

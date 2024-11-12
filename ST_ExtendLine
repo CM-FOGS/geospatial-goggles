@@ -1,0 +1,26 @@
+DROP FUNCTION IF EXISTS ST_ExtendLine(
+    geom GEOMETRY,
+    length_left double precision,
+    length_rigth double precision)
+
+CREATE OR REPLACE FUNCTION ST_ExtendLine(
+    geom GEOMETRY,
+    length_left double precision,
+    length_rigth double precision)
+    RETURNS GEOMETRY AS
+$BODY$
+    WITH
+        tbla AS (SELECT ST_Transform((ST_Dump(geom)).geom, 4326) geom),
+	tblb AS (SELECT ST_PointN(geom,2) geom2, ST_PointN(geom,1) geom1, degrees(ST_Azimuth(ST_PointN(geom,2), ST_PointN(geom,1))) r_azimuth FROM tbla),
+	tblc AS (SELECT ST_PointN(geom,-2) geom2, ST_PointN(geom,-1) geom1, degrees(ST_Azimuth(ST_PointN(geom,-2), ST_PointN(geom,-1))) l_azimuth FROM tbla),
+	tbld AS (SELECT ST_MakeLine(geom1, ST_Project(geom1::geography, length_rigth, radians(r_azimuth))::geometry) geom FROM tblb),
+	tble AS (SELECT ST_MakeLine(geom1, ST_Project(geom1::geography, length_left, radians(l_azimuth))::geometry) geom FROM tblc)
+	SELECT ST_Collect(geom) geom FROM (SELECT geom FROM tbla UNION SELECT geom FROM tbld UNION SELECT geom FROM tble) foo; 
+$BODY$
+LANGUAGE SQL
+
+IN
+SELECT ST_ExtendLine(geom, 100, 100) geom FROM <LINE_name_table>
+OUT
+(<LINE_name_table,4326>)
+*experimental function*

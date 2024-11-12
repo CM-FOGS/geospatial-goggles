@@ -1,0 +1,28 @@
+DROP FUNCTION IF EXISTS ST_CentraLAxisLongestLineFromVoronoiDiagrams(
+    geom GEOMETRY,
+    n integer)
+
+CREATE OR REPLACE FUNCTION ST_CentraLAxisLongestLineFromVoronoiDiagrams(
+    geom GEOMETRY,
+    n integer)
+RETURNS GEOMETRY AS
+$BODY$
+    WITH
+        tbla AS (SELECT (ST_Dump($1)).geom),
+        tblb AS (SELECT ST_ExteriorRing(geom) geom1, ST_Buffer(ST_ExteriorRing(geom), 0.000001) geom2 FROM tbla),
+        tblc AS (SELECT line1, line2, line3 FROM (SELECT ST_MakeLine((ST_PointN(ST_Boundary(ST_OrientedEnvelope(geom1)),1)),
+(ST_PointN(ST_Boundary(ST_OrientedEnvelope(geom1)),2))) AS line1, ST_MakeLine((ST_PointN(ST_Boundary(ST_OrientedEnvelope(geom1)),3)), 
+(ST_PointN(ST_Boundary(ST_OrientedEnvelope(geom1)),4))) AS line2, ST_MakeLine((ST_PointN(ST_Boundary(ST_OrientedEnvelope(geom1)),1)), 
+(ST_PointN(ST_Boundary(ST_OrientedEnvelope(geom1)),4))) AS line3 FROM tblb) AS moo),
+        tbld AS (SELECT (ST_Dump(ST_Difference(a.geom2, ST_Union(b.geom)))).geom AS geom FROM tblb a CROSS JOIN LATERAL
+             (SELECT ST_Buffer(line1, 0.00001) geom FROM tblc UNION SELECT ST_Buffer(line2, 0.00001) geom FROM tblc) b GROUP BY a.geom2),
+        tble AS (SELECT (a.geom) geom FROM tbld a JOIN tblc b ON ST_Intersects(a.geom, b.line3)),
+        tblf AS (SELECT generate_series (0, n) as steps),
+        tblg AS (SELECT steps AS stp, ST_LineInterpolatePoint(geom1, steps/(SELECT count(steps)::float-1 FROM tblf)) geom FROM tblb, tblf GROUP BY tblf.steps, geom),
+        tblh AS (SELECT ((ST_Dump(ST_VoronoiPolygons(ST_Collect(geom)))).geom) geom FROM tblg),
+        tbli AS (SELECT ST_ExteriorRing(ST_Union(a.geom)) geom FROM tblh a JOIN tble b ON ST_Intersects(a.geom, b.geom))
+        SELECT ST_Intersection(a.geom, b.geom) geom FROM tbli a JOIN tbla b ON ST_Intersects(a.geom, b.geom);
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_CentraLAxisLongestLineFromVoronoiDiagrams(geom, 789) geom FROM <polygon_table>

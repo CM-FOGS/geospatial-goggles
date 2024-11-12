@@ -1,0 +1,20 @@
+DROP FUNCTION IF EXISTS ST_EqualNumberPointsInPolygons_vd(
+    geom GEOMETRY,
+    n integer)
+
+CREATE OR REPLACE FUNCTION ST_EqualNumberPointsInPolygons_vd(
+    geom GEOMETRY,
+    n integer)
+RETURNS TABLE (geom GEOMETRY) AS
+$BODY$
+    WITH
+        basegeom AS (SELECT (ST_Dump($1)).geom),
+        exteriorr AS (SELECT ST_ExteriorRing(geom) geom FROM basegeom),
+        intervals AS (SELECT generate_series (0, n) steps), interpolpnts AS (SELECT steps AS stp, ST_LineInterpolatePoint(geom, steps/(SELECT count(steps)::float-1 FROM intervals)) geom FROM exteriorr, intervals GROUP BY intervals.steps, geom),
+        voronoi AS (SELECT (ST_Dump(ST_VoronoiPolygons(ST_Collect(geom)))).geom geom FROM interpolpnts),
+        tblc AS (SELECT ST_Intersection (a.geom, b.geom) geom FROM voronoi a JOIN basegeom b ON ST_Intersects (a.geom, b.geom))
+        SELECT ST_PointonSurface(geom) geom FROM tblc;
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_EqualNumberPointsInPolygons_vd(geom, 100) geom FROM <name_table>

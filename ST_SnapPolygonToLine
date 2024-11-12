@@ -1,0 +1,18 @@
+DROP FUNCTION IF EXISTS ST_SnapPolygonToLine(
+    geom1 GEOMETRY,
+    geom2 GEOMETRY)
+
+CREATE OR REPLACE FUNCTION ST_SnapPolygonToLine(
+    geom1 GEOMETRY,
+    geom2 GEOMETRY)
+RETURNS GEOMETRY AS  
+$BODY$
+    WITH
+        tbla AS (SELECT (ST_Dump($1)).geom),
+        tblb AS (SELECT (ST_Dump($2)).geom),
+        tblc AS (SELECT ST_ShortestLine(a.geom, b.geom) geom FROM (SELECT (ST_DumpPoints(geom)).geom FROM tbla) a JOIN tblb b ON true)
+        SELECT ST_PointsInStarPolygon(geom) geom FROM (SELECT ST_Union(geom) geom FROM (SELECT (ST_DumpPoints(geom)).geom FROM tblc) a) b;
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_SnapPolygonToLine(a.geom, b.geom) geom FROM polygon a JOIN line b ON true

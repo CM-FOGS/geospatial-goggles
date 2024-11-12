@@ -1,0 +1,20 @@
+DROP FUNCTION IF EXISTS generate_numbers_interval_as_descending_order(
+    k integer,
+    i integer)
+ 
+CREATE OR REPLACE FUNCTION generate_numbers_interval_as_descending_order(
+    k integer,
+    i integer)
+RETURNS TABLE (x integer) AS 
+$BODY$
+    WITH 
+        s AS (SELECT n, x, lag(x) OVER (ORDER BY n, ((n%2 * 2)-1) * x) l_x FROM generate_series(1, i) n, generate_series(0, k) x)
+        SELECT x FROM s WHERE x <> coalesce(l_x, -1) ORDER BY n, ((n%2 * 2)-1) * x;
+$BODY$
+LANGUAGE SQL
+
+SELECT generate_numbers_interval_as_descending_order(5,3) gni
+
+The authors and developers of the function body is
+© Erwin Brandstetter https://dba.stackexchange.com/users/3684/erwin-brandstetter; 
+© mustaccio https://dba.stackexchange.com/users/23721/mustaccio.

@@ -1,0 +1,34 @@
+DROP FUNCTION ST_GreekOrnamentOrthogonalEast(
+    cornerX double precision,
+    cornerY double precision,
+    delta_xy float,
+    quantity integer)
+	
+CREATE OR REPLACE FUNCTION ST_GreekOrnamentOrthogonalEast(
+    cornerX double precision,
+    cornerY double precision,
+    delta_xy float,
+    quantity integer)
+RETURNS GEOMETRY AS
+$BODY$
+WITH 
+    tbla AS (SELECT ST_MakeLine(ST_MakePoint(cornerX, cornerY),
+	          ST_Translate(ST_MakePoint(cornerX, cornerY), 0, delta_xy)) geom),
+    tblb AS (SELECT ROW_NUMBER() OVER (ORDER BY ST_XMin(geom) ASC) num, geom FROM (SELECT geom FROM tbla UNION SELECT ST_Translate(geom, i*delta_xy/3, 0) geom FROM tbla
+            CROSS JOIN LATERAL generate_series (1, 3) AS step(i)) foo),
+    tblc AS (SELECT geom FROM tblb WHERE num IN (1) UNION SELECT ST_LineSubstring(geom, 0, 0.666) geom FROM tblb WHERE num IN (2) UNION
+            SELECT ST_LineSubstring(geom, 0.333, 0.666) geom FROM tblb WHERE num IN (3) UNION
+            SELECT ST_LineSubstring(geom, 0.333, 1) geom FROM tblb WHERE num IN (4)),
+    tbld AS (SELECT ST_MakeLine(ST_MakePoint(cornerX, cornerY), ST_Translate(ST_MakePoint(cornerX, cornerY), delta_xy, 0)) geom), 
+    tble AS (SELECT ROW_NUMBER() OVER (ORDER BY ST_YMin(geom) ASC) num, geom FROM (SELECT geom FROM tbld UNION SELECT ST_Translate(geom, 0, i*delta_xy/3) geom FROM tbld
+            CROSS JOIN LATERAL generate_series (1, 3) AS step(i)) foo),
+    tblf AS (SELECT geom FROM tble WHERE num IN (4) UNION SELECT ST_LineSubstring(geom, 0.666, 1) geom FROM tble WHERE num IN (2) UNION
+            SELECT ST_LineSubstring(geom, 0.333, 0.666) geom FROM tble WHERE num IN (3)),
+    tblg AS (SELECT ST_MakeLine(ST_StartPoint(geom), ST_Translate(ST_StartPoint(geom), delta_xy, 0)) geom FROM tblb WHERE num in (2)),
+    tblh AS (SELECT ST_Union(geom) geom FROM (SELECT geom FROM tblc UNION SELECT geom FROM tblf UNION SELECT geom FROM tblg) foo),
+    tbli AS (SELECT * FROM tblh UNION SELECT ST_Translate(geom, 1.333*i*delta_xy,0) geom FROM tblh CROSS JOIN LATERAL generate_series (1, quantity-1) AS step(i))
+            SELECT ST_Union(geom) geom FROM tbli;
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_SetSriD(ST_GreekOrnamentOrthogonalEast(23.726666667, 37.971388889, 0.0001, 10), 4326) geom

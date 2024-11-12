@@ -1,0 +1,24 @@
+DROP FUNCTION IF EXISTS ST_PerpendicularTransectsFromRiverLine_v2(
+    geom GEOMETRY,
+    sl numeric,
+    radius_buffer float) 
+
+CREATE OR REPLACE FUNCTION ST_PerpendicularTransectsFromRiverLine_v2(
+    geom GEOMETRY,
+    sl numeric,
+    radius_buffer float)
+    RETURNS TABLE (geom GEOMETRY) AS 
+$BODY$
+    WITH
+        geodata AS (SELECT row_number() over() AS id, geom),
+        linedivide AS (SELECT row_number() over() AS id, ST_LineSubstring(d.geom, substart, CASE WHEN subend > 1 THEN 1 ELSE subend END) geom FROM (SELECT id, geom, ST_Length(((geom)::geometry)) len, sl sublen FROM geodata) AS d
+CROSS JOIN LATERAL (SELECT i, (sublen * i)/len AS substart, (sublen * (i+1))/len AS subend
+FROM generate_series(0, floor(d.len/sublen)::integer) AS t(i) WHERE (sublen * i)/len <> 1.0) AS d2),
+        bound AS (SELECT ST_Boundary(ST_Buffer(geom, radius_buffer, 'endcap=flat join=round')) geom FROM linedivide), 
+        segments AS (SELECT ST_MakeLine(pt1, pt2) geom FROM (SELECT ST_PointN(geom, generate_series(1, ST_NPoints(geom)-1)) pt1,
+ST_PointN(geom, generate_series(2, ST_NPoints(geom))) pt2 FROM bound) AS geom)
+        SELECT ST_Union(a.geom) geom FROM segments a JOIN geodata b ON ST_Intersects(a.geom,b.geom); 
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_PerpendicularTransectsFromRiverLine_v2(geom, 1.5, 5) geom FROM <line_name_table> 

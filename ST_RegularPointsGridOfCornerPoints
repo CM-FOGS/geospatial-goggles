@@ -1,0 +1,23 @@
+DROP FUNCTION IF EXISTS ST_RegularPointsGridOfCornerPoints(
+    geom GEOMETRY,
+    r bigint,
+    c bigint)
+
+CREATE OR REPLACE FUNCTION ST_RegularPointsGridOfCornerPoints(
+    geom GEOMETRY,
+    r bigint,
+    c bigint)
+RETURNS TABLE (geom GEOMETRY) AS  
+$BODY$
+    WITH 
+        tbla AS (SELECT ST_Boundary(ST_Union(geom)) geom FROM (SELECT ((ST_DelaunayTriangles(ST_Collect(geom)))) geom) foo),         tblb AS (SELECT row_number() over() AS id, ST_MakeLine(pt1, pt2) geom FROM (SELECT ST_PointN(geom, generate_series(1, ST_NPoints(geom)-1)) pt1, ST_PointN(geom, generate_series(2, ST_NPoints(geom))) pt2 FROM tbla) AS geom),
+        tblc AS (SELECT generate_series (0,r-1) as steps),
+        tbld AS (SELECT steps AS stp1, ST_LineInterpolatePoint(geom, steps/(SELECT count(steps)::float-1 FROM tblc)) geom1 FROM tblc, tblb WHERE tblb.id IN (2) GROUP BY tblc.steps, geom),
+        tble AS (SELECT steps AS stp2, ST_LineInterpolatePoint(ST_Reverse(geom), steps/(SELECT count(steps)::float-1 FROM tblc)) geom2 FROM tblc, tblb WHERE tblb.id IN (4) GROUP BY tblc.steps, geom),
+        tblf AS (SELECT row_number() over() AS id, ST_MakeLine(geom1, geom2) geom FROM tbld JOIN tble ON true AND stp1=stp2),
+        tblg AS (SELECT generate_series (0,c-1) as steps)
+        SELECT ST_LineInterpolatePoint(geom, steps/(SELECT count(steps-1)::float-1 FROM tblg)) geom FROM tblg, tblf geom;
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_RegularPointsGridOfCornerPoints(geom, 7, 5) geom FROM <name_poly_table>

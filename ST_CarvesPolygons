@@ -1,0 +1,17 @@
+DROP FUNCTION IF EXISTS ST_CarvesPolygons(
+geom1 GEOMETRY, 
+geom2 GEOMETRY)
+
+CREATE OR REPLACE FUNCTION ST_CarvesPolygons(
+geom1 GEOMETRY, 
+geom2 GEOMETRY)
+RETURNS TABLE (geom GEOMETRY) AS
+$BODY$
+      WITH
+          in_gd1 AS (SELECT ($1) geom),
+          in_gd2 AS (SELECT ($2) geom)
+          SELECT (ST_Dump(ST_Difference(a.geom, b.geom))).geom geom FROM in_gd2 a CROSS JOIN LATERAL (SELECT ST_Collect(geom) AS geom FROM in_gd1 WHERE ST_Intersects(a.geom, geom)) AS b;   
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_CarvesPolygons(a.geom, b.geom) geom FROM (SELECT ST_Collect(geom) geom FROM polygons) a, poly_extent b;

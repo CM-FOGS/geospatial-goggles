@@ -1,0 +1,30 @@
+DROP FUNCTION IF EXISTS ST_LongestAxisPolygonsFromVoronoiDiagrams_gs(
+    geom GEOMETRY,
+    n integer)
+
+CREATE OR REPLACE FUNCTION ST_LongestAxisPolygonsFromVoronoiDiagrams_gs(
+    geom GEOMETRY,
+    n integer)
+RETURNS GEOMETRY AS
+$BODY$
+    WITH
+        tbla AS (SELECT (ST_Dump($1)).geom),
+        tblb AS (WITH btbl AS (SELECT (ST_ExteriorRing(((ST_Dump(geom)).geom))) geom),
+            intervals AS (SELECT generate_series (0, n) as steps)
+            SELECT steps AS stp, ST_LineInterpolatePoint(geom, steps/(SELECT count(steps)::float-1 FROM intervals)) geom FROM btbl, intervals GROUP BY intervals.steps, geom),
+        tblc AS (SELECT ((ST_Dump(ST_VoronoiPolygons(ST_Collect(geom)))).geom) geom FROM tblb),
+        tbld AS (SELECT (ST_Dump(ST_Intersection(a.geom, b.geom))).geom FROM tblc a JOIN tbla b ON ST_Intersects(a.geom, b.geom)),
+        tble AS (SELECT line1, line2 FROM (SELECT ST_MakeLine((ST_PointN(ST_Boundary(ST_OrientedEnvelope(geom)),1)),
+        (ST_PointN(ST_Boundary(ST_OrientedEnvelope(geom)),2))) AS line1, ST_MakeLine((ST_PointN(ST_Boundary(ST_OrientedEnvelope(geom)),2)), (ST_PointN(ST_Boundary(ST_OrientedEnvelope(geom)),3))) AS line2 FROM tbla) AS foo),
+        tblf AS (SELECT (ST_Buffer(line2, ST_Length(line2), 'endcap=flat join=round')) geom FROM tble),
+        tblg AS (SELECT DISTINCT (ST_Dump(ST_Difference(a.geom, b.geom))).geom FROM tblf a JOIN tbla b ON ST_Intersects(a.geom, b.geom)),
+        tblh AS (SELECT (ST_Dump(ST_Buffer(geom, -0.000001))).geom geom FROM tblg),
+        tbli AS (SELECT (ST_Buffer(geom, 0.000002)) geom FROM tblh a JOIN tble b ON ST_Intersects(a.geom, b.line2)),
+        tblj AS (SELECT ST_ExteriorRing(ST_Union(a.geom)) geom FROM tbld a JOIN tbli b ON ST_Intersects(a.geom, b.geom)),
+        tblk AS (SELECT ST_MakeLine(pt1, pt2) geom FROM (SELECT ST_PointN(geom, generate_series(1, ST_NPoints(geom)-1)) pt1, ST_PointN(geom, generate_series(2, ST_NPoints(geom))) pt2 FROM tblj) AS geom),
+        tbll AS (SELECT (ST_Dump(ST_Intersection(ST_Buffer(a.geom, -0.0001), b.geom))).geom FROM tbla a JOIN tblk b ON ST_Contains(a.geom, b.geom))
+        SELECT ST_MakeLine(ST_Centroid(geom)) geom FROM tbll;
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_LongestAxisPolygonsFromVoronoiDiagrams_gs(geom, 300) geom FROM <source_table>

@@ -1,0 +1,19 @@
+DROP FUNCTION IF EXISTS ST_UnionMultyRingsBuffersFromLineOrPoly_bevel(
+    geom GEOMETRY,
+    radius_buffer float,
+    n bigint)
+
+CREATE OR REPLACE FUNCTION ST_UnionMultyRingsBuffersFromLineOrPoly_bevel(
+    geom GEOMETRY,
+    radius_buffer float,
+    n bigint)
+RETURNS GEOMETRY AS  
+$BODY$
+    WITH
+        tbla AS  (SELECT (ST_Dump($1)).geom),
+        tblb AS (SELECT ST_Union(ST_Buffer(geom, radius_buffer*i, 'join=bevel')) geom FROM tbla a CROSS JOIN LATERAL generate_series (1, n) AS step(i) GROUP BY i)
+		    SELECT ST_Polygonize(geom) geom FROM tblb;
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_UnionMultyRingsBuffersFromLineOrPoly_bevel(ST_Collect(geom), 10, 10) geom FROM <LINE/POLY_name_table>

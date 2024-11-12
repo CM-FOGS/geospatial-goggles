@@ -1,0 +1,20 @@
+DROP FUNCTION IF EXISTS ST_PerpendicularTransectsFromLine(
+    geom GEOMETRY,
+    sl numeric)
+
+CREATE OR REPLACE FUNCTION ST_PerpendicularTransectsFromLine(
+    geom GEOMETRY,
+    sl numeric)
+    RETURNS TABLE (geom GEOMETRY) AS 
+$BODY$
+	WITH
+	    geodata AS (SELECT row_number() over() AS id, geom),
+	    linecut AS (SELECT id, ST_LineSubstring(d.geom, substart, CASE WHEN subend > 1 THEN 1 ELSE subend END) geom FROM (SELECT id, geom, ST_Length(((geom)::geometry)) len, sl sublen FROM geodata) AS d CROSS JOIN LATERAL (SELECT i,  (sublen * i)/len AS substart, (sublen * (i+1))/len AS subend
+	FROM generate_series(0, floor( d.len / sublen)::integer) AS t(i) WHERE (sublen * i)/len <> 1.0) AS d2),
+	    rotate AS (SELECT id, ST_Rotate(ST_Collect(geom), -pi()/2, ST_LineInterpolatePoint(geom, 0.5)) geom FROM linecut GROUP BY id, geom),
+	    tbld AS (SELECT id, (ST_Dump(geom)).geom geom FROM rotate)
+            SELECT ST_MakeLine(ST_StartPoint(geom), ST_EndPoint(geom)) geom FROM tbld;
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_PerpendicularTransectsFromLine(geom, 1.5) geom FROM <name_line_table>

@@ -1,0 +1,21 @@
+DROP FUNCTION IF EXISTS ST_BufferClusteringRequiredDistance(
+   geom GEOMETRY,
+   required_distance float,
+   gr_cnt integer)
+
+CREATE OR REPLACE FUNCTION ST_BufferClusteringRequiredDistance(
+   geom GEOMETRY,
+   required_distance float,
+   gr_cnt integer)
+RETURNS GEOMETRY AS
+$BODY$
+      WITH
+          tbla AS (SELECT (ST_Dump(geom)).geom geom),
+          tblb AS (SELECT ((ST_Dump(ST_Union(ST_Buffer(geography(geom), required_distance)::geometry))).geom) geom FROM tbla),
+          tblc AS (SELECT b.geom, count (*) cnt FROM tbla a JOIN tblb b ON ST_Intersects(ST_PointOnSurface(a.geom), b.geom) GROUP BY b.geom),
+          tbld AS (SELECT geom FROM tblc WHERE cnt NOT IN (gr_cnt))
+          SELECT ST_Collect(a.geom) geom FROM tbla a WHERE EXISTS (SELECT 1 FROM tbld b WHERE ST_Intersects(ST_PointOnSurface(a.geom), b.geom));
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_BufferClusteringRequiredDistance(geom, 501, 1) geom FROM (SELECT ST_Collect(geom) geom FROM <polygons_name_table) foo

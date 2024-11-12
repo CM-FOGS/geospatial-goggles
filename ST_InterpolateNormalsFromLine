@@ -1,0 +1,26 @@
+DROP FUNCTION IF EXISTS ST_InterpolateNormalsFromLine(
+    geom geometry,
+    secLen float,
+    transectLen float,
+    fraction float8)
+
+CREATE OR REPLACE FUNCTION ST_InterpolateNormalsFromLine(
+    geom geometry,
+    secLen float,
+    transectLen float,
+    fraction float8)
+    RETURNS TABLE (geom geometry) AS 
+$BODY$
+    WITH
+        geodata AS (SELECT geom, ST_Length(geom) lineLen),
+        sections AS (SELECT ST_LineSubstring(geom, secStart, CASE WHEN secEnd > 1 THEN 1 ELSE secEnd END) geom
+    FROM geodata AS t CROSS JOIN LATERAL (SELECT i * secLen/lineLen AS secStart, (i+1) * secLen/lineLen AS secEnd FROM generate_series(0, floor(lineLen/secLen)::integer) AS t(i) WHERE (secLen * i)/lineLen <> 1.0) t2),
+        sectAnglePt AS (SELECT pi() - ST_Azimuth(ST_StartPoint(geom), ST_EndPoint(geom)) ang, ST_LineInterpolatePoints(geom, fraction) geom FROM sections),
+        dumppnts AS (SELECT ang, (ST_DumpPoints(geom)).geom geom FROM sectAnglePt)
+        SELECT ST_Collect(ST_MakeLine(ST_Point(ST_X(geom) - transectLen * cos(ang), ST_Y(geom) - transectLen * sin(ang)), ST_Point(ST_X(geom) + transectLen * cos(ang), ST_Y(geom) + transectLen * sin(ang)))) geom FROM dumppnts;
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_InterpolateNormalsFromLine(geom, 100, 10, 0.1) geom FROM <LINE_name_table>
+
+*experimental function*

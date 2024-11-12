@@ -1,0 +1,28 @@
+DROP FUNCTION IF EXISTS ST_PerpendicularTransectsFromRiverLine_v1(
+	geom GEOMETRY,
+	sl numeric,
+	radius_buffer float)
+
+CREATE OR REPLACE FUNCTION ST_PerpendicularTransectsFromRiverLine_v1(
+	geom GEOMETRY,
+	sl numeric,
+	radius_buffer float)
+RETURNS TABLE (geom GEOMETRY) AS 
+$BODY$
+	WITH
+	    geodata AS (SELECT row_number() over() AS id, geom),
+	    linedivide AS (SELECT row_number() over() AS id, ST_LineSubstring(d.geom, substart, CASE WHEN subend > 1 THEN 1 ELSE subend END) geom FROM (SELECT id, geom, ST_Length(((geom)::geometry)) len, sl sublen FROM geodata) AS d
+CROSS JOIN LATERAL (SELECT i, (sublen * i)/len AS substart, (sublen * (i+1))/len AS subend
+FROM generate_series(0, floor(d.len/sublen)::integer) AS t(i) WHERE (sublen * i)/len <> 1.0) AS d2),
+	    tblb AS (SELECT id, ST_Buffer((geom), 0.5*(radius_buffer+0.000001),'endcap=round join=round') geom FROM linedivide),
+	    tblc_l AS (SELECT a.id, ST_LineMerge(ST_Difference(ST_ExteriorRing(a.geom), b.geom)) geom FROM tblb a LEFT JOIN tblb b ON (ST_Intersects(a.geom, b.geom) AND a.id < b.id)),
+	    tblcpoly_l AS (SELECT id, ST_MakePolygon(ST_AddPoint(geom, ST_StartPoint(geom))) geom FROM tblc_l),
+	    tbld_r AS (SELECT a.id, ST_LineMerge(ST_Difference(ST_ExteriorRing(a.geom), b.geom)) geom FROM tblb a LEFT JOIN tblb b ON (ST_Intersects(a.geom, b.geom) AND a.id > b.id)),
+	    tbldpoly_r AS (SELECT id, ST_ExteriorRing(ST_MakePolygon(ST_AddPoint(geom, ST_StartPoint(geom)))) geom FROM tbld_r),
+	    inter AS (SELECT ST_Intersection(a.geom, b.geom) geom FROM tblcpoly_l a JOIN tbldpoly_r b ON ST_Intersects(a.geom, b.geom) AND a.id=b.id),
+	    cut AS (SELECT ST_Intersection(ST_Buffer(a.geom, -0.000001), b.geom) geom FROM tblb a JOIN inter b ON ST_Intersects(a.geom, b.geom))
+	    SELECT ST_Union(geom) geom FROM cut;
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_PerpendicularTransectsFromRiverLine_v1(geom, 1.5, 5) geom FROM <line_name_table>

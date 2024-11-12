@@ -1,0 +1,23 @@
+DROP FUNCTION IF EXISTS ST_RoadAxis(
+    geom GEOMETRY,
+    n integer)
+
+CREATE OR REPLACE FUNCTION ST_RoadAxis(
+    geom GEOMETRY,
+    n integer)
+RETURNS GEOMETRY AS  
+$BODY$
+      WITH
+          geodata AS (SELECT (ST_Dump(geom)).geom),
+          left_line AS (SELECT (ST_Dump(geom)).geom geom FROM geodata LIMIT 1),
+          right_line AS (SELECT (a.geom) geom FROM geodata a WHERE NOT EXISTS (SELECT 1 FROM left_line b WHERE ST_Intersects(a.geom, b.geom))),
+          intervals AS (SELECT generate_series (0, n) steps),
+          lineinterpnt AS (SELECT steps AS stp, ST_LineInterpolatePoint(geom, steps/(SELECT count(steps)::float-1 FROM intervals)) geom FROM left_line, intervals GROUP BY intervals.steps, geom ORDER BY intervals.steps),
+          sleepers AS (SELECT DISTINCT stp, ST_ShortestLine(a.geom, b.geom) geom FROM lineinterpnt a CROSS JOIN LATERAL (SELECT (geom) geom FROM right_line) b ORDER BY stp)
+          SELECT ST_MakeLine(geom) geom FROM (SELECT stp, ST_LineInterpolatePoint(geom, 0.5) geom FROM sleepers ORDER BY stp) foo;
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_RoadAxis(ST_Union(geom), 300) geom FROM parallel_street
+
+*experimental function*

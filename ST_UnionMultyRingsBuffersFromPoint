@@ -1,0 +1,21 @@
+DROP FUNCTION IF EXISTS ST_UnionMultyRingsBuffersFromPoint(
+    geom GEOMETRY,
+    radius float,
+    n bigint,
+    k integer)
+
+CREATE OR REPLACE FUNCTION ST_UnionMultyRingsBuffersFromPoint(
+    geom GEOMETRY,
+    radius float,
+    n bigint,
+    k integer)
+RETURNS GEOMETRY AS  
+$BODY$
+    WITH
+        tbla AS (SELECT (ST_Dump($1)).geom),
+        tblb AS (SELECT ST_Union(ST_RegularPolygon(geom, radius*i, k)) geom FROM tbla a CROSS JOIN LATERAL generate_series (1, n) AS step(i) GROUP BY i)
+        SELECT ST_Polygonize(geom) geom FROM tblb;
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_UnionMultyRingsBuffersFromPoint(geom, 1, 10, 100) geom FROM <POINT_name_table>

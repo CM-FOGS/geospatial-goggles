@@ -1,0 +1,23 @@
+DROP FUNCTION IF EXISTS ST_ArchimedianSpiralСlockwiseEast(
+    centerX double precision,
+    centerY double precision,
+    radius float,
+    circleSegs integer,
+    rings numeric)
+
+CREATE OR REPLACE FUNCTION ST_ArchimedianSpiralСlockwiseEast(
+    centerX double precision,
+    centerY double precision,
+    radius float,
+    circleSegs integer,
+    rings numeric)
+RETURNS GEOMETRY AS
+$BODY$
+    WITH 
+        spiralStep AS (SELECT i FROM generate_series(0, rings * circleSegs) t(i))
+        (SELECT ST_MakeLine(ST_MakePoint(centerX + (radius/circleSegs) * i * cos(i * (2 * pi()/circleSegs)),
+        centerY + (radius/circleSegs) * i * -sin(i * (2 * pi()/circleSegs)))) AS geom FROM spiralStep);
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_SetSrid(ST_ArchimedianSpiralСlockwiseEast(15.326975287, 37.007075212, 0.003, 75, 3.3), 4326) geom

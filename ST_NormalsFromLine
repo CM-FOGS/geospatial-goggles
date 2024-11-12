@@ -1,0 +1,35 @@
+DROP FUNCTION IF EXISTS ST_NormalsFromLine(
+    geom geometry,
+    secLen float,
+    transectLen float)
+
+CREATE OR REPLACE FUNCTION ST_NormalsFromLine(
+    geom geometry,
+    secLen float,
+    transectLen float)
+    RETURNS geometry 
+    LANGUAGE sql AS 
+$BODY$
+WITH
+geodata AS (SELECT geom, ST_Length(geom) AS lineLen),
+sections AS (SELECT ST_LineSubstring(geom, secStart, CASE WHEN secEnd > 1 THEN 1 ELSE secEnd END) geom
+    FROM geodata AS t
+    CROSS JOIN LATERAL 
+        (SELECT i * secLen/lineLen AS secStart, (i+1) * secLen/lineLen AS secEnd
+            FROM generate_series(0, floor(lineLen / secLen)::integer) AS t(i) 
+            WHERE (secLen * i)/lineLen <> 1.0) AS t2 ),
+sectAnglePt AS (SELECT pi() - ST_Azimuth(ST_StartPoint(geom), ST_EndPoint(geom)) AS ang,
+                  ST_LineInterpolatePoint(geom, 0.5) AS centre
+                  FROM sections)
+SELECT ST_Collect(ST_MakeLine(
+                    ST_Point( ST_X(centre) - transectLen * cos(ang), 
+                              ST_Y(centre) - transectLen * sin(ang)),
+                    ST_Point( ST_X(centre) + transectLen * cos(ang), 
+                              ST_Y(centre) + transectLen * sin(ang)) )) AS geom 
+  FROM sectAnglePt;
+$BODY$;
+
+SELECT ST_NormalsFromLine(geom, 100, 10) geom FROM <LINE_name_table>
+
+The authors and developers of the function body is
+© Martin Davis https://github.com/dr-jts 

@@ -1,0 +1,15 @@
+DROP FUNCTION IF EXISTS ST_ExtractionExternalGridCells(
+    geom GEOMETRY)
+
+CREATE OR REPLACE FUNCTION ST_ExtractionExternalGridCells(
+    geom GEOMETRY)
+RETURNS TABLE (geom GEOMETRY) AS 
+$BODY$ 
+	WITH
+	    tbla AS (SELECT (ST_Dump($1)).geom),
+	    tblb AS (SELECT ST_ExteriorRing(ST_Union(geom)) geom FROM tbla)
+	    SELECT ST_Collect(a.geom) geom FROM tbla a JOIN tblb b ON ST_Intersects(a.geom, b.geom);
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_ExtractionExternalGridCells(ST_Collect(geom)) geom FROM <polygon_grid_table>

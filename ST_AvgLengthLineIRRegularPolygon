@@ -1,0 +1,41 @@
+DROP FUNCTION IF EXISTS ST_AvgLengthLineIRRegularPolygon(
+    geom GEOMETRY,
+    n integer) 
+
+CREATE OR REPLACE FUNCTION ST_AvgLengthLineIRRegularPolygon(
+    geom GEOMETRY,
+    n integer)
+RETURNS double precision AS
+$BODY$
+    WITH
+        tbl_rigth AS (WITH 
+        tbla AS (SELECT (ST_Dump($1)).geom),
+        tblb AS (SELECT ST_LongestLine(a.geom, b.geom) geom FROM tbla a JOIN tbla b ON ST_Intersects(a.geom, b.geom)), 
+        tblc AS (SELECT geom, ST_Length(geography(geom)) lenght FROM tblb),
+        tbld AS (SELECT ST_Buffer(geom, lenght/1855/60) geom FROM tblc),
+        tble AS (SELECT ST_Boundary(ST_OrientedEnvelope(geom)) geom FROM tbld),
+        tblf AS (SELECT line1, line2 FROM (SELECT ST_MakeLine(ST_PointN(geom,1), ST_PointN(geom,2)) line1, ST_MakeLine(ST_PointN(geom,4), ST_PointN(geom,3)) line2 FROM tble) foo),
+        tblg AS (SELECT generate_series (0, n) as steps),
+        tblh AS (SELECT steps AS stp1, ST_LineInterpolatePoint(line1, steps/(SELECT count(steps)::float-1 FROM tblg)) geom1 FROM tblf, tblg GROUP BY tblg.steps, geom1),
+        tbli AS (SELECT steps AS stp2, ST_LineInterpolatePoint(line2, steps/(SELECT count(steps)::float-1 FROM tblg)) geom2 FROM tblf, tblg GROUP BY tblg.steps, geom2),
+        tblj AS (SELECT ST_MakeLine(geom1, geom2) geom FROM tblh JOIN tbli ON true AND stp1=stp2),
+        tblk AS (SELECT (ST_Dump(ST_Intersection(a.geom, b.geom))).geom geom, count(*) cnt FROM tblj a JOIN tbla b ON true GROUP BY a.geom, b.geom)
+        (SELECT ST_Length(geography(ST_Union(geom)))/SUM(cnt) avg_length FROM tblk)),
+        tbl_lefth AS (WITH 
+        tbla AS (SELECT (ST_Dump($1)).geom),
+        tblb AS (SELECT ST_LongestLine(a.geom, b.geom) geom FROM tbla a JOIN tbla b ON ST_Intersects(a.geom, b.geom)), 
+        tblc AS (SELECT geom, ST_Length(geography(geom)) lenght FROM tblb),
+        tbld AS (SELECT ST_Buffer(geom, lenght/1855/60) geom FROM tblc),
+        tble AS (SELECT ST_Boundary(ST_OrientedEnvelope(geom)) geom FROM tbld),
+        tblf AS (SELECT line1, line2 FROM (SELECT ST_MakeLine(ST_PointN(geom,2), ST_PointN(geom,3)) line1, ST_MakeLine(ST_PointN(geom,1), ST_PointN(geom,4)) line2 FROM tble) foo),
+        tblg AS (SELECT generate_series (0, n) as steps),
+        tblh AS (SELECT steps AS stp1, ST_LineInterpolatePoint(line1, steps/(SELECT count(steps)::float-1 FROM tblg)) geom1 FROM tblf, tblg GROUP BY tblg.steps, geom1),
+        tbli AS (SELECT steps AS stp2, ST_LineInterpolatePoint(line2, steps/(SELECT count(steps)::float-1 FROM tblg)) geom2 FROM tblf, tblg GROUP BY tblg.steps, geom2),
+        tblj AS (SELECT ST_MakeLine(geom1, geom2) geom FROM tblh JOIN tbli ON true AND stp1=stp2),
+        tblk AS (SELECT (ST_Dump(ST_Intersection(a.geom, b.geom))).geom geom, count(*) cnt FROM tblj a JOIN tbla b ON true GROUP BY a.geom, b.geom)
+        (SELECT ST_Length(geography(ST_Union(geom)))/SUM(cnt) avg_length FROM tblk))
+        SELECT avg_length FROM tbl_rigth UNION SELECT avg_length FROM tbl_lefth  
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_AvgLengthLineIRRegularPolygon(geom, 300) avglengt FROM <polygon_name_table>

@@ -1,0 +1,19 @@
+DROP FUNCTION IF EXISTS ST_RaysInGridPolygons(
+    geom GEOMETRY)
+
+CREATE OR REPLACE FUNCTION ST_RaysInGridPolygons(
+    geom GEOMETRY)
+RETURNS TABLE (geom GEOMETRY) AS
+$BODY$
+    WITH
+        tbla AS (SELECT ROW_NUMBER() OVER() as id, (ST_Dump(geom)).geom),
+        tblb AS (SELECT id, ST_Boundary(geom) geom FROM tbla),
+        tblc AS (SELECT id, ST_MakeLine(pt1, pt2) geom FROM (SELECT id, ST_PointN(geom, generate_series(1, ST_NPoints(geom)-1)) pt1, ST_PointN(geom, generate_series(2, ST_NPoints(geom))) pt2 FROM tblb) AS geom),
+        tbld AS (SELECT id, ST_Centroid(geom) geom FROM tblc UNION SELECT id, (ST_DumpPoints(geom)).geom geom FROM tblb),
+        tble AS (SELECT id bid, ST_Centroid(geom) geom FROM tbla), 
+        tblf AS (SELECT bid, ST_MakeLine(a.geom, b.geom) geom FROM tble a CROSS JOIN (SELECT id, (geom) FROM tbld) b WHERE a.bid=b.id ORDER BY a.bid)
+        SELECT geom FROM tblf;
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_RaysInGridPolygons(geom) geom FROM <grid_polygons>

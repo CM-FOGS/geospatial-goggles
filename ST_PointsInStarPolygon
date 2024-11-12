@@ -1,0 +1,19 @@
+DROP FUNCTION IF EXISTS ST_PointsInStarPolygon(
+    geom GEOMETRY)
+
+CREATE OR REPLACE FUNCTION ST_PointsInStarPolygon(
+    geom GEOMETRY)
+RETURNS GEOMETRY AS
+$BODY$
+    WITH
+        pts AS (SELECT (ST_DumpPoints(geom)).geom geom),
+        centroid AS (SELECT ST_Centroid(ST_Collect(geom)) AS centroid FROM pts),
+        line AS (SELECT ST_MakeLine(geom ORDER BY ST_Azimuth(centroid, geom)) AS geom FROM pts CROSS JOIN centroid),
+        poly AS (SELECT ST_MakePolygon(ST_AddPoint(geom, ST_StartPoint(geom))) AS geom FROM line)
+        SELECT ST_Collect(geom) FROM poly;
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_PointsInStarPolygon(ST_Collect(geom)) geom FROM <POINT_name_table>
+
+The authors and developers of the function body is © Martin Davis https://github.com/dr-jts 

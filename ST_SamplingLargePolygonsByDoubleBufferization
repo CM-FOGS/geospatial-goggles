@@ -1,0 +1,19 @@
+DROP FUNCTION IF EXISTS ST_SamplingLargePolygonsByDoubleBufferization(
+    geom GEOMETRY,
+    radius_buffer float)
+
+CREATE OR REPLACE FUNCTION ST_SamplingLargePolygonsByDoubleBufferization(
+    geom GEOMETRY,
+    radius_buffer float)
+RETURNS TABLE (geom GEOMETRY) AS
+$BODY$
+	WITH
+            in_geodata AS (SELECT (ST_Dump($1)).geom),
+            eraser AS (SELECT ST_Buffer((ST_Dump((ST_Buffer(geom,-radius_buffer)))).geom, radius_buffer) geom FROM in_geodata),
+            pntsurface AS (SELECT ST_PointOnSurface(geom) geom FROM eraser),
+	    out_geodata AS (SELECT ST_Collect(a.geom) geom FROM in_geodata a WHERE EXISTS (SELECT 1 FROM pntsurface b WHERE ST_Intersects(a.geom, b.geom)))
+	    SELECT ST_Collect(geom) geom FROM out_geodata WHERE geom <> '".$empty."';
+$BODY$
+LANGUAGE SQL;
+
+SELECT ST_SamplingLargePolygonsByDoubleBufferization(ST_Collect(geom), 0.1) geom FROM <polygon_name_table>

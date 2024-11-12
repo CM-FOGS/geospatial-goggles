@@ -1,0 +1,15 @@
+WITH spiralStep AS (
+   SELECT i, 
+          80 AS circleSegs,   -- Parameter: quantization of arc
+          1000 AS centerX,    -- Parameter: center X
+          1000 as centerY,    -- Parameter: center Y
+          100.0 as radius     -- Parameter: radius
+  FROM generate_series(0, 5 * 80) t(i) -- Parameter: # rings = 5
+)
+SELECT ST_MakeLine( 
+    ST_Point(centerX + (radius / circleSegs) * i * cos(i * (2 * pi() / circleSegs)),
+             centerY + (radius / circleSegs) * i * sin(i * (2 * pi() / circleSegs)))
+ORDER BY i) AS geom
+FROM spiralStep;
+
+The author and developer of the function body is © Martin Davis https://github.com/dr-jts

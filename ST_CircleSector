@@ -1,0 +1,32 @@
+DROP FUNCTION IF EXISTS ST_CircleSector(
+    geom GEOMETRY,
+    radius float,
+    angle_sector numeric,
+    angle_rotation numeric,
+    step_angle numeric)
+
+CREATE OR REPLACE FUNCTION ST_CircleSector(
+    geom GEOMETRY,
+    radius float,
+    angle_sector numeric,
+    angle_rotation numeric,
+    step_angle numeric)
+RETURNS TABLE (geom GEOMETRY) AS
+$BODY$
+      WITH 
+          in_gd AS (SELECT ($1) geom),
+          proj_pnt AS (SELECT ST_Project(geom::geography, radius, radians(0))::geometry geom FROM in_gd),
+          proj_pnts AS (SELECT ((ST_DumpPoints(ST_Rotate((b.geom), (-radians(step_angle))*i, a.geom))).geom) geom FROM in_gd a, proj_pnt b, 
+	  generate_series(1, @(angle_sector)/step_angle) AS s(i) GROUP BY s, a.geom, b.geom UNION SELECT geom FROM proj_pnt),
+          line_arc AS (SELECT ST_MakeLine(a.geom ORDER BY ST_Azimuth(b.geom, a.geom)) geom FROM proj_pnts a CROSS JOIN in_gd b),
+          line_arc_center AS (SELECT ST_MakeLine(ST_AddPoint(a.geom, b.geom)) geom FROM line_arc a, in_gd b),
+          line_sector AS (SELECT ST_LineMerge(geom) geom FROM (SELECT ST_MakeLine(ST_AddPoint(geom, ST_StartPoint(geom))) geom FROM line_arc_center) foo),
+          out_data AS (SELECT ST_MakePolygon(geom) geom FROM line_sector),
+          rotate AS (SELECT ST_Rotate(b.geom, -radians(angle_rotation-angle_sector/2), a.geom) geom FROM in_gd a, out_data b)
+          SELECT ST_Union(geom) geom FROM rotate;
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_CircleSector(geom, 1000, 60, 90, 1) geom FROM (SELECT ST_SetSRID(ST_MakePoint(15.326975287, 37.007075212),4326) geom) foo
+
+*experimental function*

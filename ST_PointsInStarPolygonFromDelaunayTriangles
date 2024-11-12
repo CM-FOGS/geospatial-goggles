@@ -1,0 +1,19 @@
+DROP FUNCTION IF EXISTS ST_PointsInStarPolygonFromDelaunayTriangles(
+  geom GEOMETRY)
+
+CREATE OR REPLACE FUNCTION ST_PointsInStarPolygonFromDelaunayTriangles(
+  geom GEOMETRY)
+RETURNS GEOMETRY AS
+$BODY$
+  WITH
+      tbla AS (SELECT (ST_DumpPoints(geom)).geom geom),
+      tblb AS (SELECT ST_Centroid(ST_Collect(geom)) geom FROM tbla),
+      tblc AS (SELECT geom FROM tbla UNION SELECT geom FROM tblb),
+      tbld AS (SELECT ST_MakeLine(a.geom, b.geom) geom FROM tblb a CROSS JOIN tbla b),
+      tble AS (SELECT ST_Union(ST_Buffer(ST_MakeLine(ST_LineInterpolatePoint(a.geom, 0.9), b.geom),0.00001)) geom FROM tbld a CROSS JOIN tblb b),
+      tblf AS (SELECT ((ST_Dump(ST_DelaunayTriangles(ST_Collect(geom)))).geom) geom FROM tblc)
+      SELECT ST_Union(a.geom) geom FROM tblf a JOIN tble b ON ST_Intersects(a.geom, b.geom);
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_PointsInStarPolygonFromDelaunayTriangles(geom) geom FROM (SELECT ST_Collect(geom) geom FROM pts) foo

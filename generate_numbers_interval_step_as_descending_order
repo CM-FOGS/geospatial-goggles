@@ -1,0 +1,18 @@
+DROP FUNCTION IF EXISTS generate_numbers_interval_step_as_descending_order(
+    k numeric,
+    i numeric,
+    st numeric)
+
+CREATE OR REPLACE FUNCTION generate_numbers_interval_step_as_descending_order(
+    k numeric,
+    i numeric,
+    st numeric)
+RETURNS TABLE (x numeric) AS 
+$BODY$
+    WITH 
+        s AS (SELECT n, x, lag(x) OVER (ORDER BY n, ((n%2 * 2)-1) * x) l_x FROM generate_series(1, i) n, generate_series(0, k, st) x)
+        SELECT x FROM s WHERE x <> coalesce(l_x, -1) ORDER BY n, ((n%2 * 2)-1) * x;
+$BODY$
+LANGUAGE SQL
+
+SELECT generate_numbers_interval_step_as_descending_order(90,1,0.5) gni

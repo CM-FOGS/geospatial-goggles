@@ -1,0 +1,41 @@
+DROP FUNCTION IF EXISTS ST_MaxDistanceWestEastIRRegularPolygon(
+    geom GEOMETRY,
+    n integer)
+
+CREATE OR REPLACE FUNCTION ST_MaxDistanceWestEastIRRegularPolygon(
+    geom GEOMETRY,
+    n integer)
+RETURNS GEOMETRY AS
+$BODY$
+    WITH
+        tbl_rigth AS (WITH 
+        tbla AS (SELECT (ST_Dump($1)).geom),
+        tblb AS (SELECT ST_Boundary(ST_Envelope(geom)) geom FROM tbla),
+        tblc AS (SELECT line1, line2 FROM (SELECT ST_MakeLine(ST_PointN(geom,1), ST_PointN(geom,2)) line1, ST_MakeLine(ST_PointN(geom,4), ST_PointN(geom,3)) line2 FROM tblb) foo),
+        tbld AS (SELECT generate_series (0, n) as steps),
+        tble AS (SELECT steps AS stp1, ST_LineInterpolatePoint(line1, steps/(SELECT count(steps)::float-1 FROM tbld)) geom1 FROM tblc, tbld GROUP BY tbld.steps, geom1),
+        tblf AS (SELECT steps AS stp2, ST_LineInterpolatePoint(line2, steps/(SELECT count(steps)::float-1 FROM tbld)) geom2 FROM tblc, tbld GROUP BY tbld.steps, geom2),
+        tblg AS (SELECT ST_MakeLine(geom1, geom2) geom FROM tble JOIN tblf ON true AND stp1=stp2),
+        tblh AS (SELECT (ST_Dump(ST_Intersection(a.geom, b.geom))).geom geom FROM tblg a JOIN tbla b ON true GROUP BY a.geom, b.geom),
+        tbli AS (SELECT ST_Length(geography(geom)) lenght, geom FROM tblh),
+        tblj AS (SELECT geom, MAX(lenght) max_length, degrees(ST_Azimuth(ST_StartPoint(geom), ST_EndPoint(geom))) azimuth FROM tbli GROUP BY geom ORDER BY max_length DESC LIMIT 1)
+        SELECT geom FROM tblj WHERE azimuth IN (90,-90)),
+        tbl_lefth AS (WITH 
+        tbla AS (SELECT (ST_Dump($1)).geom),
+        tblb AS (SELECT ST_Boundary(ST_Envelope(geom)) geom FROM tbla),
+        tblc AS (SELECT line1, line2 FROM (SELECT ST_MakeLine(ST_PointN(geom,2), ST_PointN(geom,3)) line1, ST_MakeLine(ST_PointN(geom,1), ST_PointN(geom,4)) line2 FROM tblb) foo),
+        tbld AS (SELECT generate_series (0, n) as steps),
+        tble AS (SELECT steps AS stp1, ST_LineInterpolatePoint(line1, steps/(SELECT count(steps)::float-1 FROM tbld)) geom1 FROM tblc, tbld GROUP BY tbld.steps, geom1),
+        tblf AS (SELECT steps AS stp2, ST_LineInterpolatePoint(line2, steps/(SELECT count(steps)::float-1 FROM tbld)) geom2 FROM tblc, tbld GROUP BY tbld.steps, geom2),
+        tblg AS (SELECT ST_MakeLine(geom1, geom2) geom FROM tble JOIN tblf ON true AND stp1=stp2),
+        tblh AS (SELECT (ST_Dump(ST_Intersection(a.geom, b.geom))).geom geom FROM tblg a JOIN tbla b ON true GROUP BY a.geom, b.geom),
+        tbli AS (SELECT ST_Length(geography(geom)) lenght, geom FROM tblh),
+        tblj AS (SELECT geom, MAX(lenght) max_length, degrees(ST_Azimuth(ST_StartPoint(geom), ST_EndPoint(geom))) azimuth FROM tbli GROUP BY geom ORDER BY max_length DESC LIMIT 1) 
+        SELECT geom FROM tblj WHERE azimuth IN (90,-90))
+        SELECT geom FROM tbl_rigth UNION SELECT geom FROM tbl_lefth;
+    $BODY$
+LANGUAGE SQL
+
+WITH 
+tbla AS (SELECT ST_MaxDistanceWestEastIRRegularPolygon(geom,300) geom FROM <table_name>) 
+SELECT ST_Distance(ST_StartPoint(geom)::geography, ST_EndPoint(geom)::geography) distance FROM tbla

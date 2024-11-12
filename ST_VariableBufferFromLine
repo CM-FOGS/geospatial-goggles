@@ -1,0 +1,32 @@
+DROP FUNCTION IF EXISTS ST_VariableBufferFromLine(
+    geom GEOMETRY, 
+    start_dist NUMERIC,
+    end_dist NUMERIC)
+
+CREATE OR REPLACE FUNCTION ST_VariableBufferFromLine(
+    geom GEOMETRY, 
+    start_dist NUMERIC,
+    end_dist NUMERIC)
+RETURNS GEOMETRY AS
+$BODY$
+WITH 
+    step1 AS 
+        (SELECT ST_DumpPoints(geom) AS dump,  
+        geom),
+    step2 AS
+        (SELECT (dump).path[1], 
+            ST_Buffer( (dump).geom, 
+                start_dist + (end_dist - start_dist) * ST_LineLocatePoint(geom, (dump).geom) 
+                ) AS geom 
+        FROM step1),
+    step3 AS
+        (SELECT 
+            ST_ConvexHull(ST_Union(geom, LEAD(geom) OVER(ORDER BY path))) AS geom 
+        FROM step2)
+SELECT ST_Union(geom) AS geom FROM step3;
+$BODY$
+LANGUAGE SQL;
+
+SELECT ST_VariableBufferFromLine( 'LINESTRING( 0 0, 100 0)' , 1, 10 );
+
+© Martin Davis https://github.com/dr-jts

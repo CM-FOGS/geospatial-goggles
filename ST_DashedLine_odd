@@ -1,0 +1,20 @@
+DROP FUNCTION IF EXISTS ST_DashedLine_odd(
+    geom GEOMETRY,
+    sl integer)
+
+CREATE OR REPLACE FUNCTION ST_DashedLine_odd(
+    geom GEOMETRY,
+    sl integer)
+    RETURNS TABLE (geom GEOMETRY) AS 
+$BODY$
+    WITH
+        geodata AS (SELECT row_number() over() AS id, geom),
+        linedivide AS (SELECT row_number() over() AS id, ST_LineSubstring(d.geom, substart, CASE WHEN subend > 1 THEN 1 ELSE subend END) geom FROM (SELECT id, geom, ST_Length(((geom)::geometry)) len, sl sublen FROM geodata) AS d
+CROSS JOIN LATERAL (SELECT i, (sublen * i)/len AS substart, (sublen * (i+1))/len AS subend
+FROM generate_series(0, floor(d.len/sublen)::integer) AS t(i) WHERE (sublen * i)/len <> 1.0) AS d2),
+        tblc AS (SELECT geom, case id % 2 when 0 then 'even' else 'odd' end FROM linedivide)
+        SELECT ST_Union(geom) geom FROM tblc WHERE tblc.case='odd';
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_DashedLine_odd(geom, 15) geom FROM <line_table_name>

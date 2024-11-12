@@ -1,0 +1,21 @@
+DROP FUNCTION IF EXISTS ST_RegularPolygon(
+geom GEOMETRY,
+radius float,
+edge integer)
+
+CREATE OR REPLACE FUNCTION ST_RegularPolygon(
+geom GEOMETRY,
+radius float,
+edge integer)
+RETURNS GEOMETRY AS
+$BODY$
+    WITH 
+        tbla AS (SELECT $1)
+        SELECT ST_MakePolygon(ST_MakeLine(ST_Point(ST_X(geom) + radius * COSD(90 + i * 360/edge), ST_Y(geom) + radius * SIND(90 + i * 360/edge)))) geom 
+        FROM generate_series(0, edge) AS s(i);
+$BODY$
+LANGUAGE SQL
+
+SELECT ST_SetSRID(ST_RegularPolygon(geom, 0.1, 5),4326) geom FROM <point_table>
+
+The authors and developers of the function body is © Martin Davis https://github.com/dr-jts
